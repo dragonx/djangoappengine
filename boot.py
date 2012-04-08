@@ -188,3 +188,10 @@ def setup_project():
             while path in sys.path:
                 sys.path.remove(path)
         sys.path = extra_paths + sys.path
+
+    # In SDK 1.6.4, the datastore doesn't save automatically on exit.
+    # Register a handler to make sure we save.  This is important on 
+    # manage.py commands other than 'runserver'.  Note that with runserver,
+    # the datastore is flushed twice.  This should be acceptable.
+    import atexit
+    atexit.register(dev_appserver.TearDownStubs)
