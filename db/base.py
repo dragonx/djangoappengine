@@ -208,9 +208,9 @@ class DatabaseOperations(NonrelDatabaseOperations):
                 value = unicode(value)
 
         # Dates and times are stored as datetimes, drop the added part.
-        elif db_type == 'date':
+        elif db_type == 'date' and isinstance(value, datetime.datetime):
             value = value.date()
-        elif db_type == 'time':
+        elif db_type == 'time' and isinstance(value, datetime.datetime):
             value = value.time()
 
         # Convert GAE Blobs to plain strings for Django.
