@@ -5,7 +5,7 @@ from django.utils.encoding import smart_unicode
 from djangoappengine.db.utils import AncestorKey
 
 from google.appengine.api.datastore import Key
-from google.appengine.api.datastore.datastore_errors import BadKeyError
+from google.appengine.api.datastore_errors import BadKeyError
 
 class DbKeyField(models.Field):
     description = "A field for native database key objects"
