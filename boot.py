@@ -212,5 +212,4 @@ def setup_project():
     # manage.py commands other than 'runserver'.  Note that with runserver,
     # the datastore is flushed twice.  This should be acceptable.
     import atexit
-    if hasattr(dev_appserver, 'TearDownStubs'):
-        atexit.register(dev_appserver.TearDownStubs)
+    atexit.register(dev_appserver.TearDownStubs)
