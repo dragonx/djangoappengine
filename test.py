@@ -14,10 +14,6 @@ class GAETestCase(TestCase):
         if hasattr(self, 'consistency_probability'):
             datastore = stub_manager.testbed.get_stub('datastore_v3')
             self._orig_policy = datastore._consistency_policy
-            
-            import eat
-            eat.gaebp(True)
-            
             datastore.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=self.consistency_probability))
 
         
