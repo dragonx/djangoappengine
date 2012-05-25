@@ -1,6 +1,4 @@
-from google.appengine.api.datastore import Key
 from google.appengine.datastore.datastore_query import Cursor
-
 from django.db import models, DEFAULT_DB_ALIAS
 
 try:
@@ -22,7 +20,7 @@ def get_cursor(queryset):
     # Evaluate QuerySet.
     len(queryset)
     cursor = getattr(queryset.query, '_gae_cursor', None)
-    return Cursor.to_websafe_string(cursor) if cursor else None
+    return Cursor.to_websafe_string(cursor)
 
 
 def set_cursor(queryset, start=None, end=None):
@@ -59,15 +57,3 @@ def commit_locked(func_or_using=None):
     if callable(func_or_using):
         return inner_commit_locked(func_or_using, DEFAULT_DB_ALIAS)
     return lambda func: inner_commit_locked(func, func_or_using)
-
-class AncestorKey(object):
-    def __init__(self, key):
-        self.key = key
-
-def as_ancestor(key):
-    if key is None:
-        raise ValueError("key must not be None")
-    return AncestorKey(key)
-
-def make_key(model, id_or_name, parent=None):
-    return Key.from_path(model._meta.db_table, id_or_name, parent=parent)

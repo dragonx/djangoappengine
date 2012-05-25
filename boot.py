@@ -171,9 +171,9 @@ def setup_project():
             dev_appserver.HardenedModulesHook._WHITE_LIST_C_MODULES.extend(
                 ('parser', '_ssl', '_io'))
         except AttributeError:
-            logging.warn('Could not patch modules whitelist. '
-                         'The compiler and parser modules will not work and '
-                         'SSL support is disabled.')
+            logging.warn("Could not patch modules whitelist. the compiler "
+                         "and parser modules will not work and SSL support "
+                         "is disabled.")
     elif not on_production_server:
         try:
             # Restore the real subprocess module.
