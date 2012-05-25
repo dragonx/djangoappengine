@@ -7,3 +7,4 @@ from .keys import KeysTest, DbKeyFieldTest, AncestorQueryTest, ParentKeyTest
 from .not_return_sets import NonReturnSetsTest
 from .order import OrderTest
 from .transactions import TransactionTest
+from .ancestor import AncestorTest
