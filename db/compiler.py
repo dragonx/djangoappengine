@@ -380,7 +380,7 @@ class SQLInsertCompiler(NonrelInsertCompiler, SQLCompiler):
             else:
                 properties[field.column] = value
 
-            if field in unindexed_fields:
+            if field.column in unindexed_fields:
                 kwds['unindexed_properties'].append(field.column)
 
         entity = Entity(opts.db_table, **kwds)
