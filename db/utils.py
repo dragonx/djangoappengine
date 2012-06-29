@@ -90,4 +90,5 @@ def make_key(*args, **kwargs):
         model, id_or_name = args[i:i+2]
         converted_args.extend((model._meta.db_table, id_or_name))
 
-    return Key.from_path(*converted_args, parent=parent)
+    newkwargs = { 'parent' : parent }
+    return Key.from_path(*converted_args, **newkwargs)
