@@ -1,6 +1,7 @@
 import os
 import threading
-import httplib          
+import httplib
+import logging
 from django.core.handlers.wsgi import WSGIHandler
 from django.core.servers.basehttp import WSGIServerException
 from django.db import connections
@@ -83,6 +84,7 @@ class LiveServerThread(threading.Thread):
             for index, port in enumerate(self.possible_ports):
                 try:
                     options = dev_appserver_main.DEFAULT_ARGS.copy()
+                    options['disable_task_running'] = True # Prevent launch of task queue thread
                     dev_appserver.SetupStubs("project-eat", **options)
                     self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
 
@@ -121,8 +123,10 @@ class LiveServerThread(threading.Thread):
                 # We need to hit the server with one more request to make it quit
                 connection = httplib.HTTPConnection(self.host, self.port)
                 connection.request('GET',"/")
-            except:
-                pass        
+                connection.close()
+                self.httpd.server_close()
+            except Exception, e:
+                logging.error("LiveServerThread join caught " + str(e))
         super(LiveServerThread, self).join(timeout)
 
 # This is copied directly from django.test.testcases
@@ -199,4 +203,31 @@ class LiveServerTestCase(TransactionTestCase):
             # Terminate the live server's thread
             cls.server_thread.join()
         super(LiveServerTestCase, cls).tearDownClass()
+
+    def _pre_setup(self):
+        """Performs any pre-test setup. This includes:
+
+            * Flushing the database.
+            * If the Test Case class has a 'fixtures' member, installing the
+              named fixtures.
+            * If the Test Case class has a 'urls' member, replace the
+              ROOT_URLCONF with it.
+            * Clearing the mail test outbox.
+        """
+        retry = True
+        while retry:
+            '''
+            There's some ugly multithreading bug where the db flush on the main thread (which runs tests) 
+            fails because the child thread (running the http server) is doing something - I don't know what.
+            My hackaround is just to keep retrying the flush until it succeeds.
+            
+            There's already a warning in the djano docs about accessing the DB while the child thread is accessing it.
+            '''
+            try:
+                super(LiveServerTestCase,self)._pre_setup()
+                retry = False
+            except Exception, e:
+                import eat
+                eat.stacktrace()
+                eat.gaebp(True)
 
