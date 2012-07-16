@@ -48,7 +48,8 @@ class StubManager(object):
         self.testbed.init_memcache_stub()
         self.testbed.init_taskqueue_stub(root_path=PROJECT_DIR)
         self.testbed.init_urlfetch_stub()
-        self.testbed.init_user_stub(True, **{ 'login_url' : '/_ah/login?continue=%s' })
+        self.testbed.init_user_stub(True, **{ 'logout_url'   : '/_ah/login?continue=%s&action=Logout',
+                                              'login_url' : '/_ah/login?continue=%s' })
         self.testbed.init_xmpp_stub()
         self.testbed.init_channel_stub()
 
