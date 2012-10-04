@@ -1,6 +1,8 @@
 import os
+import types
 import threading
 import httplib
+import select
 import logging
 from django.core.handlers.wsgi import WSGIHandler
 from django.core.servers.basehttp import WSGIServerException
@@ -30,7 +32,6 @@ class GAETestCase(TestCase):
             self._orig_policy = datastore._consistency_policy
             
             datastore.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=self.consistency_probability))
-
         
     def _post_teardown(self):
         """ Performs any post-test things. This includes:
@@ -45,6 +46,7 @@ class GAETestCase(TestCase):
 
         super(GAETestCase,self)._post_teardown()
 
+liveServerLock = threading.Lock()
 
 class LiveServerThread(threading.Thread):
     """
@@ -69,6 +71,21 @@ class LiveServerThread(threading.Thread):
         Sets up the live server and databases, and then loops over handling
         http requests.
         """
+
+        def sync_handle_request(self):
+            try:
+                readable, _, _ = select.select([self.socket], [], [], 10)
+                if readable:
+                    liveServerLock.acquire()
+                    try:
+                        self.original_handle_request()
+                    except Exception, e:
+                        pass
+                    finally:
+                        liveServerLock.release()
+            except Exception, e:
+                pass
+
         if self.connections_override:
             from django.db import connections
             # Override this thread's database connections with the ones
@@ -86,6 +103,7 @@ class LiveServerThread(threading.Thread):
                     options = dev_appserver_main.DEFAULT_ARGS.copy()
                     options['disable_task_running'] = True # Prevent launch of task queue thread
                     dev_appserver.SetupStubs("project-eat", **options)
+
                     self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
 
                 except WSGIServerException, e:
@@ -109,13 +127,20 @@ class LiveServerThread(threading.Thread):
                     break
 
             #self.httpd.set_app(handler)
+
+            # hack replace the http server with our sync enabled version
+            self.httpd.original_handle_request = self.httpd.handle_request
+            self.httpd.handle_request = types.MethodType(sync_handle_request, self.httpd)
+
             self.is_ready.set()           
             self.httpd.serve_forever()
         except Exception, e:
+            #logging.error("LiveServerThread caught exception " + str(e))
             self.error = e
             self.is_ready.set()
 
     def join(self, timeout=None):
+        logging.info("LiveServerThread join called")
         if hasattr(self, 'httpd'):
             # Stop the WSGI server
             self.httpd.stop_serving_forever()
@@ -141,14 +166,14 @@ class LiveServerTestCase(TransactionTestCase):
     sqlite) and each thread needs to commit all their transactions so that the
     other thread can see the changes.
     """
+    lock = liveServerLock
 
     @property
     def live_server_url(self):
         return 'http://%s:%s' % (
             self.server_thread.host, self.server_thread.port)
 
-    @classmethod
-    def setUpClass(cls):
+    def _pre_setup(self):
         connections_override = {}
         for conn in connections.all():
             # If using in-memory sqlite databases, pass the connections to
@@ -183,51 +208,23 @@ class LiveServerTestCase(TransactionTestCase):
         except Exception:
             raise ImproperlyConfigured('Invalid address ("%s") for live '
                 'server.' % specified_address)
-        cls.server_thread = LiveServerThread(
+        self.server_thread = LiveServerThread(
             host, possible_ports, connections_override)
-        cls.server_thread.daemon = True
-        cls.server_thread.start()
+        self.server_thread.daemon = True
+        self.server_thread.start()
 
         # Wait for the live server to be ready
-        cls.server_thread.is_ready.wait()
-        if cls.server_thread.error:
-            raise cls.server_thread.error
+        self.server_thread.is_ready.wait()
+        if self.server_thread.error:
+            raise self.server_thread.error
 
-        super(LiveServerTestCase, cls).setUpClass()
+        super(LiveServerTestCase, self)._pre_setup()
 
-    @classmethod
-    def tearDownClass(cls):
+    def _post_teardown(self):
         # There may not be a 'server_thread' attribute if setUpClass() for some
         # reasons has raised an exception.
-        if hasattr(cls, 'server_thread'):
+        if hasattr(self, 'server_thread'):
             # Terminate the live server's thread
-            cls.server_thread.join()
-        super(LiveServerTestCase, cls).tearDownClass()
-
-    def _pre_setup(self):
-        """Performs any pre-test setup. This includes:
-
-            * Flushing the database.
-            * If the Test Case class has a 'fixtures' member, installing the
-              named fixtures.
-            * If the Test Case class has a 'urls' member, replace the
-              ROOT_URLCONF with it.
-            * Clearing the mail test outbox.
-        """
-        retry = True
-        while retry:
-            '''
-            There's some ugly multithreading bug where the db flush on the main thread (which runs tests) 
-            fails because the child thread (running the http server) is doing something - I don't know what.
-            My hackaround is just to keep retrying the flush until it succeeds.
-            
-            There's already a warning in the djano docs about accessing the DB while the child thread is accessing it.
-            '''
-            try:
-                super(LiveServerTestCase,self)._pre_setup()
-                retry = False
-            except Exception, e:
-                import eat
-                eat.stacktrace()
-                eat.gaebp(True)
+            self.server_thread.join()
+        super(LiveServerTestCase, self)._post_teardown()
 
