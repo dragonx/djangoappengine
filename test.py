@@ -16,6 +16,7 @@ from google.appengine.tools import dev_appserver_main
 from google.appengine.datastore import datastore_stub_util
 
 from db.stubs import stub_manager
+from utils import appid
 
 class GAETestCase(TestCase):
     '''
@@ -55,6 +56,16 @@ class LiveServerThread(threading.Thread):
     This is mostly copied from django.test.testcases.LiveServerThread
     It's modified slightly to launch dev_appserver instead of a plain
     HTTP server.  The shutdown mechanism is slightly different too.
+
+    One big problem is that dev_appserver mangles the environment.
+    It's easy to run into threading issues where the dev_appserver
+    thread and the main application (test) thread conflict.  One common
+    example is trying to use logging.error(), which will often cause
+    conflicts since dev_appserver replaces stderr.  We use
+    liveServerLock to avoid these conflicts.
+
+    Your own test code will need to acquire liveServerLock pretty much
+    every time you're doing something outside of an HTTP request.
     """
 
     def __init__(self, host, possible_ports, connections_override=None):
@@ -93,16 +104,13 @@ class LiveServerThread(threading.Thread):
             for alias, conn in self.connections_override.items():
                 connections[alias] = conn
         try:
-            # Create the handler for serving static and media files
-            handler = StaticFilesHandler(_MediaFilesHandler(WSGIHandler()))
-
             # Go through the list of possible ports, hoping that we can find
             # one that is free to use for the WSGI server.
             for index, port in enumerate(self.possible_ports):
                 try:
                     options = dev_appserver_main.DEFAULT_ARGS.copy()
                     options['disable_task_running'] = True # Prevent launch of task queue thread
-                    dev_appserver.SetupStubs("project-eat", **options)
+                    dev_appserver.SetupStubs(appid, **options)
 
                     self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
 
@@ -126,16 +134,14 @@ class LiveServerThread(threading.Thread):
                     self.port = port
                     break
 
-            #self.httpd.set_app(handler)
-
-            # hack replace the http server with our sync enabled version
+            # HACK: The magic happens here.  We replace the http request handler
+            # with our sync'd version
             self.httpd.original_handle_request = self.httpd.handle_request
             self.httpd.handle_request = types.MethodType(sync_handle_request, self.httpd)
 
             self.is_ready.set()           
             self.httpd.serve_forever()
         except Exception, e:
-            #logging.error("LiveServerThread caught exception " + str(e))
             self.error = e
             self.is_ready.set()
 
@@ -161,10 +167,14 @@ class LiveServerTestCase(TransactionTestCase):
     http server in a separate thread so that the tests may use another testing
     framework, such as Selenium for example, instead of the built-in dummy
     client.
+
     Note that it inherits from TransactionTestCase instead of TestCase because
     the threads do not share the same transactions (unless if using in-memory
     sqlite) and each thread needs to commit all their transactions so that the
     other thread can see the changes.
+
+    Be careful that almost everything you do needs to be synchronized against
+    the liveServerLock (which you can easily reference as this.lock()
     """
     lock = liveServerLock
 
