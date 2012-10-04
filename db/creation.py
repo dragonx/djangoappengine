@@ -74,7 +74,7 @@ class DatabaseCreation(NonrelDatabaseCreation):
     def _create_test_db(self, *args, **kw):
         self._had_test_stubs = stub_manager.active_stubs != 'test'
         if self._had_test_stubs:
-            stub_manager.activate_test_stubs()
+            stub_manager.activate_test_stubs(self.connection)
 
     def _destroy_test_db(self, *args, **kw):
         if hasattr(self, '_had_test_stubs'):
