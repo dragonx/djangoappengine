@@ -1,3 +1,4 @@
+import mimetypes
 import os
 
 try:
@@ -15,6 +16,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.utils.encoding import smart_str, force_unicode
 
+from google.appengine.api import files
+from google.appengine.api.images import get_serving_url, NotImageError
 from google.appengine.ext.blobstore import BlobInfo, BlobKey, delete, \
     create_upload_url, BLOB_KEY_HEADER, BLOB_RANGE_HEADER, BlobReader
 
@@ -58,10 +61,21 @@ class BlobstoreStorage(Storage):
             data = content.file.blobstore_info
         elif hasattr(content, 'blobstore_info'):
             data = content.blobstore_info
+        elif isinstance(content, File):
+            guessed_type = mimetypes.guess_type(name)[0]
+            file_name = files.blobstore.create(mime_type=guessed_type or 'application/octet-stream',
+                                               _blobinfo_uploaded_filename=name)
+
+            with files.open(file_name, 'a') as f:
+                for chunk in content.chunks():
+                    f.write(chunk)
+
+            files.finalize(file_name)
+
+            data = files.blobstore.get_blob_key(file_name)
         else:
             raise ValueError("The App Engine storage backend only supports "
-                             "BlobstoreFile instances or File instances "
-                             "whose file attribute is a BlobstoreFile.")
+                             "BlobstoreFile instances or File instances.")
 
         if isinstance(data, (BlobInfo, BlobKey)):
             # We change the file name to the BlobKey's str() value.
@@ -84,7 +98,13 @@ class BlobstoreStorage(Storage):
         return self._get_blobinfo(name).size
 
     def url(self, name):
-        raise NotImplementedError()
+        try:
+            return get_serving_url(self._get_blobinfo(name))
+        except NotImageError:
+            return None
+
+    def created_time(self, name):
+        return self._get_blobinfo(name).creation
 
     def get_valid_name(self, name):
         return force_unicode(name).strip().replace('\\', '/')
