@@ -1,9 +1,10 @@
 import os
+import errno
 import types
 import threading
 import httplib
+import socket
 import select
-import logging
 from django.core.handlers.wsgi import WSGIHandler
 from django.core.servers.basehttp import WSGIServerException
 from django.db import connections
@@ -17,6 +18,7 @@ from google.appengine.datastore import datastore_stub_util
 
 from db.stubs import stub_manager
 from utils import appid
+from unittest.runner import TextTestResult
 
 class GAETestCase(TestCase):
     '''
@@ -48,6 +50,12 @@ class GAETestCase(TestCase):
         super(GAETestCase,self)._post_teardown()
 
 liveServerLock = threading.Lock()
+
+class SyncTextTestResult(TextTestResult):
+    def addError(self, test, err):
+        if hasattr(test, "server_thread"):
+            test.server_thread.join()
+        super(SyncTextTestResult, self).addError(test, err)
 
 class LiveServerThread(threading.Thread):
     """
@@ -113,12 +121,8 @@ class LiveServerThread(threading.Thread):
                     dev_appserver.SetupStubs(appid, **options)
 
                     self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
-
-                except WSGIServerException, e:
-                    if sys.version_info < (2, 6):
-                        error_code = e.args[0].args[0]
-                    else:
-                        error_code = e.args[0].errno
+                except socket.error, e:
+                    error_code = e.errno
                     if (index + 1 < len(self.possible_ports) and
                         error_code == errno.EADDRINUSE):
                         # This port is already in use, so we go on and try with
@@ -129,6 +133,7 @@ class LiveServerThread(threading.Thread):
                         # is something else than "Address already in use". So
                         # we let that error bubble up to the main thread.
                         raise
+
                 else:
                     # A free port was found.
                     self.port = port
@@ -143,21 +148,24 @@ class LiveServerThread(threading.Thread):
             self.httpd.serve_forever()
         except Exception, e:
             self.error = e
+            try:
+                self.httpd.server_close()
+            except Exception, e:
+                pass
             self.is_ready.set()
 
     def join(self, timeout=None):
-        logging.info("LiveServerThread join called")
         if hasattr(self, 'httpd'):
             # Stop the WSGI server
-            self.httpd.stop_serving_forever()
             try:
+                self.httpd.stop_serving_forever()
                 # We need to hit the server with one more request to make it quit
                 connection = httplib.HTTPConnection(self.host, self.port)
                 connection.request('GET',"/")
                 connection.close()
-                self.httpd.server_close()
+                #self.httpd.server_close()
             except Exception, e:
-                logging.error("LiveServerThread join caught " + str(e))
+                pass
         super(LiveServerThread, self).join(timeout)
 
 # This is copied directly from django.test.testcases
@@ -196,10 +204,10 @@ class LiveServerTestCase(TransactionTestCase):
 
         # Launch the live server's thread
         specified_address = os.environ.get(
-            'DJANGO_LIVE_TEST_SERVER_ADDRESS', 'localhost:8081')
+            'DJANGO_LIVE_TEST_SERVER_ADDRESS', 'localhost:8081-8089')
 
         # The specified ports may be of the form '8000-8010,8080,9200-9300'
-        # i.e. a comma-separated list of ports or ranges of ports, so we break
+        # i.e. a comma-separated list of ports or ranges gg ports, so we break
         # it down into a detailed list of all possible ports.
         possible_ports = []
         try:
@@ -218,6 +226,7 @@ class LiveServerTestCase(TransactionTestCase):
         except Exception:
             raise ImproperlyConfigured('Invalid address ("%s") for live '
                 'server.' % specified_address)
+
         self.server_thread = LiveServerThread(
             host, possible_ports, connections_override)
         self.server_thread.daemon = True
@@ -228,7 +237,9 @@ class LiveServerTestCase(TransactionTestCase):
         if self.server_thread.error:
             raise self.server_thread.error
 
+        liveServerLock.acquire() # Lock while we load fixtures
         super(LiveServerTestCase, self)._pre_setup()
+        liveServerLock.release()
 
     def _post_teardown(self):
         # There may not be a 'server_thread' attribute if setUpClass() for some
