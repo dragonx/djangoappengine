@@ -74,16 +74,27 @@ class StubManager(object):
         if self.active_stubs == 'local':
             return
         from .base import get_datastore_paths
-        from google.appengine.tools import dev_appserver_main
-        args = dev_appserver_main.DEFAULT_ARGS.copy()
-        args.update(get_datastore_paths(connection.settings_dict))
-        args.update(connection.settings_dict.get('DEV_APPSERVER_OPTIONS', {}))
-        log_level = logging.getLogger().getEffectiveLevel()
-        logging.getLogger().setLevel(logging.WARNING)
-        from google.appengine.tools import dev_appserver
-        dev_appserver.SetupStubs('dev~' + appid, **args)
-        logging.getLogger().setLevel(log_level)
-        self.active_stubs = 'local'
+        try:
+            from google.appengine.tools import dev_appserver_main
+            args = dev_appserver_main.DEFAULT_ARGS.copy()
+            args.update(get_datastore_paths(connection.settings_dict))
+            args.update(connection.settings_dict.get('DEV_APPSERVER_OPTIONS', {}))
+            log_level = logging.getLogger().getEffectiveLevel()
+            logging.getLogger().setLevel(logging.WARNING)
+            from google.appengine.tools import dev_appserver
+            dev_appserver.SetupStubs('dev~' + appid, **args)
+            logging.getLogger().setLevel(log_level)
+            self.active_stubs = 'local'
+        except ImportError:
+            #from google.appengine.tools.devappserver2.devappserver2 import create_command_line_parser
+            #parser = create_command_line_parser()
+            #options = parser.parse_args()
+            log_level = logging.getLogger().getEffectiveLevel()
+            logging.getLogger().setLevel(logging.WARNING)
+            #from google.appengine.tools import dev_appserver
+            #dev_appserver.SetupStubs('dev~' + appid, **args)
+            #logging.getLogger().setLevel(log_level)
+            self.active_stubs = 'local'
 
     def setup_remote_stubs(self, connection):
         if self.active_stubs == 'remote':
