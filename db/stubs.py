@@ -54,6 +54,7 @@ class StubManager(object):
             datastore_opts['consistency_policy'] = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
 
         self.testbed.activate()
+        self.testbed.setup_env(True, **{'app_id' : 'dev~' + appid })
         self.pre_test_stubs = self.active_stubs
         self.active_stubs = 'test'
         self.testbed.init_datastore_v3_stub(**datastore_opts)

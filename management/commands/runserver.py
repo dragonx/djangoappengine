@@ -139,7 +139,10 @@ class Command(BaseRunserverCommand):
         args = []
         # Set bind ip/port if specified.
         if self.addr:
-            args.extend(['--host', self.addr])
+            if 'dev_appserver_main' in globals():
+                args.extend(['--address', self.addr])
+            else:
+                args.extend(['--host', self.addr])
         if self.port:
             args.extend(['--port', self.port])
 
