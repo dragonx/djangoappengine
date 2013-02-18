@@ -71,7 +71,14 @@ def make_profileable(func):
         return lambda: profile_main(func)
     return func
 
+
+import webapp2
+
+app = webapp2.WSGIApplication([('/', application)])
+
+'''
 main = make_profileable(real_main)
 
 if __name__ == '__main__':
     main()
+'''

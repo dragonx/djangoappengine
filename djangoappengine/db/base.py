@@ -155,7 +155,8 @@ class DatabaseOperations(NonrelDatabaseOperations):
         if db_type == 'key':
 #            value = self._value_for_db_key(value, field_kind)
             try:
-                value = key_from_path(field.model._meta.db_table, value)
+                if not isinstance(value, Key):
+                    value = key_from_path(field.model._meta.db_table, value)
             except (BadArgumentError, BadValueError,):
                 raise DatabaseError("Only strings and positive integers "
                                     "may be used as keys on GAE.")
@@ -169,9 +170,9 @@ class DatabaseOperations(NonrelDatabaseOperations):
 
         # Store all date / time values as datetimes, by using some
         # default time or date.
-        elif db_type == 'date':
+        elif db_type == 'date' and isinstance(value, datetime.date):
             value = datetime.datetime.combine(value, self.DEFAULT_TIME)
-        elif db_type == 'time':
+        elif db_type == 'time' and isinstance(value, datetime.time):
             value = datetime.datetime.combine(self.DEFAULT_DATE, value)
 
         # Store BlobField, DictField and EmbeddedModelField values as Blobs.
@@ -207,9 +208,9 @@ class DatabaseOperations(NonrelDatabaseOperations):
                 value = unicode(value)
 
         # Dates and times are stored as datetimes, drop the added part.
-        elif db_type == 'date':
+        elif db_type == 'date' and isinstance(value, datetime.datetime):
             value = value.date()
-        elif db_type == 'time':
+        elif db_type == 'time' and isinstance(value, datetime.datetime):
             value = value.time()
 
         # Convert GAE Blobs to plain strings for Django.

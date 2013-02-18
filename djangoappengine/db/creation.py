@@ -32,6 +32,13 @@ class DatabaseCreation(NonrelDatabaseCreation):
         field is to be indexed, and the "text" db_type (db.Text) if
         it's registered as unindexed.
         """
+        from djangoappengine.fields import DbKeyField
+
+        # DBKeyField reads/stores db.Key objects directly
+        # so its treated as a special case
+        if isinstance(field, DbKeyField):
+            return field.db_type(connection=self.connection)
+
         if self.connection.settings_dict.get('STORE_RELATIONS_AS_DB_KEYS'):
             if field.primary_key or field.rel is not None:
                 return 'key'
@@ -70,7 +77,8 @@ class DatabaseCreation(NonrelDatabaseCreation):
             stub_manager.activate_test_stubs(self.connection)
 
     def _destroy_test_db(self, *args, **kw):
-        if self._had_test_stubs:
-            stub_manager.deactivate_test_stubs()
-            stub_manager.setup_stubs(self.connection)
-        del self._had_test_stubs
+        if hasattr(self, '_had_test_stubs'):
+            if self._had_test_stubs:
+                stub_manager.deactivate_test_stubs()
+                stub_manager.setup_stubs(self.connection)
+            del self._had_test_stubs
