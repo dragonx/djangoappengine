@@ -69,8 +69,12 @@ def setup_env():
         sys.path = [ sdk_path ] + sys.path
 
         # Then call fix_sys_path from the SDK
-        from dev_appserver import fix_sys_path
-        fix_sys_path()
+        try:
+            from dev_appserver import fix_sys_path
+            fix_sys_path()
+        except ImportError:
+            import devappserver2 
+            devappserver2.fix_sys_path(devappserver2.DEVAPPSERVER2_PATHS)
 
     setup_project()
     from .utils import have_appserver
@@ -146,45 +150,51 @@ def setup_project():
     # enable https connections (seem to be broken on Windows because
     # the _ssl module is disallowed).
     if not have_appserver:
-        from google.appengine.tools import dev_appserver
         try:
-            # Backup os.environ. It gets overwritten by the
-            # dev_appserver, but it's needed by the subprocess module.
-            env = dev_appserver.DEFAULT_ENV
-            dev_appserver.DEFAULT_ENV = os.environ.copy()
-            dev_appserver.DEFAULT_ENV.update(env)
-            # Backup the buffer() builtin. The subprocess in Python 2.5
-            # on Linux and OS X uses needs it, but the dev_appserver
-            # removes it.
-            dev_appserver.buffer = buffer
-        except AttributeError:
-            logging.warn("Could not patch the default environment. "
-                         "The subprocess module will not work correctly.")
+            from google.appengine.tools import dev_appserver
+            try:
+                # Backup os.environ. It gets overwritten by the
+                # dev_appserver, but it's needed by the subprocess module.
+                env = dev_appserver.DEFAULT_ENV
+                dev_appserver.DEFAULT_ENV = os.environ.copy()
+                dev_appserver.DEFAULT_ENV.update(env)
+                # Backup the buffer() builtin. The subprocess in Python 2.5
+                # on Linux and OS X uses needs it, but the dev_appserver
+                # removes it.
+                dev_appserver.buffer = buffer
+            except AttributeError:
+                logging.warn("Could not patch the default environment. "
+                             "The subprocess module will not work correctly.")
 
-        try:
-            # Allow importing compiler/parser, _ssl (for https),
-            # _io for Python 2.7 io support on OS X
-            dev_appserver.HardenedModulesHook._WHITE_LIST_C_MODULES.extend(
-                ('parser', '_ssl', '_io'))
-        except AttributeError:
-            logging.warn("Could not patch modules whitelist. the compiler "
-                         "and parser modules will not work and SSL support "
-                         "is disabled.")
-        # In SDK 1.6.4, the datastore doesn't save automatically on exit.
-        # Register a handler to make sure we save.  This is important on 
-        # manage.py commands other than 'runserver'.  Note that with runserver,
-        # the datastore is flushed twice.  This should be acceptable.
-        import atexit
-        if hasattr(dev_appserver, 'TearDownStubs'):
-            atexit.register(dev_appserver.TearDownStubs)
+            try:
+                # Allow importing compiler/parser, _ssl (for https),
+                # _io for Python 2.7 io support on OS X
+                dev_appserver.HardenedModulesHook._WHITE_LIST_C_MODULES.extend(
+                    ('parser', '_ssl', '_io'))
+            except AttributeError:
+                logging.warn("Could not patch modules whitelist. the compiler "
+                             "and parser modules will not work and SSL support "
+                             "is disabled.")
+            # In SDK 1.6.4, the datastore doesn't save automatically on exit.
+            # Register a handler to make sure we save.  This is important on 
+            # manage.py commands other than 'runserver'.  Note that with runserver,
+            # the datastore is flushed twice.  This should be acceptable.
+            import atexit
+            if hasattr(dev_appserver, 'TearDownStubs'):
+                atexit.register(dev_appserver.TearDownStubs)
+        except ImportError:
+            pass
     elif not on_production_server:
         try:
             # Restore the real subprocess module.
+            from google.appengine.tools import dev_appserver
             from google.appengine.api.mail_stub import subprocess
             sys.modules['subprocess'] = subprocess
             # Re-inject the buffer() builtin into the subprocess module.
-            from google.appengine.tools import dev_appserver
             subprocess.buffer = dev_appserver.buffer
+        except ImportError:
+            # Not required for devappserver2
+            pass
         except Exception, e:
             logging.warn("Could not add the subprocess module to the "
                          "sandbox: %s" % e)
@@ -209,3 +219,4 @@ def setup_project():
             while path in sys.path:
                 sys.path.remove(path)
         sys.path = extra_paths + sys.path
+

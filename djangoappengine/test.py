@@ -12,8 +12,6 @@ from django.test import TestCase, TransactionTestCase
 from django.test.testcases import _MediaFilesHandler
 from django.contrib.staticfiles.handlers import StaticFilesHandler
 
-from google.appengine.tools import dev_appserver
-from google.appengine.tools import dev_appserver_main
 from google.appengine.datastore import datastore_stub_util
 
 from db.stubs import stub_manager
@@ -57,116 +55,124 @@ class SyncTextTestResult(TextTestResult):
             test.server_thread.join()
         super(SyncTextTestResult, self).addError(test, err)
 
-class LiveServerThread(threading.Thread):
-    """
-    Thread for running a live http server while the tests are running.
+try:
+    from google.appengine.tools import dev_appserver
+    from google.appengine.tools import dev_appserver_main
 
-    This is mostly copied from django.test.testcases.LiveServerThread
-    It's modified slightly to launch dev_appserver instead of a plain
-    HTTP server.  The shutdown mechanism is slightly different too.
-
-    One big problem is that dev_appserver mangles the environment.
-    It's easy to run into threading issues where the dev_appserver
-    thread and the main application (test) thread conflict.  One common
-    example is trying to use logging.error(), which will often cause
-    conflicts since dev_appserver replaces stderr.  We use
-    liveServerLock to avoid these conflicts.
-
-    Your own test code will need to acquire liveServerLock pretty much
-    every time you're doing something outside of an HTTP request.
-    """
-
-    def __init__(self, host, possible_ports, connections_override=None):
-        self.host = host
-        self.port = None
-        self.possible_ports = possible_ports
-        self.is_ready = threading.Event()
-        self.error = None
-        self.connections_override = connections_override
-        super(LiveServerThread, self).__init__()
-
-    def run(self):
+    class LiveServerThread(threading.Thread):
         """
-        Sets up the live server and databases, and then loops over handling
-        http requests.
+        Thread for running a live http server while the tests are running.
+
+        This is mostly copied from django.test.testcases.LiveServerThread
+        It's modified slightly to launch dev_appserver instead of a plain
+        HTTP server.  The shutdown mechanism is slightly different too.
+
+        One big problem is that dev_appserver mangles the environment.
+        It's easy to run into threading issues where the dev_appserver
+        thread and the main application (test) thread conflict.  One common
+        example is trying to use logging.error(), which will often cause
+        conflicts since dev_appserver replaces stderr.  We use
+        liveServerLock to avoid these conflicts.
+
+        Your own test code will need to acquire liveServerLock pretty much
+        every time you're doing something outside of an HTTP request.
         """
 
-        def sync_handle_request(self):
-            try:
-                readable, _, _ = select.select([self.socket], [], [], 10)
-                if readable:
-                    liveServerLock.acquire()
-                    try:
-                        self.original_handle_request()
-                    except Exception, e:
-                        pass
-                    finally:
-                        liveServerLock.release()
-            except Exception, e:
-                pass
+        def __init__(self, host, possible_ports, connections_override=None):
+            self.host = host
+            self.port = None
+            self.possible_ports = possible_ports
+            self.is_ready = threading.Event()
+            self.error = None
+            self.connections_override = connections_override
+            super(LiveServerThread, self).__init__()
 
-        if self.connections_override:
-            from django.db import connections
-            # Override this thread's database connections with the ones
-            # provided by the main thread.
-            for alias, conn in self.connections_override.items():
-                connections[alias] = conn
-        try:
-            # Go through the list of possible ports, hoping that we can find
-            # one that is free to use for the WSGI server.
-            for index, port in enumerate(self.possible_ports):
+        def run(self):
+            """
+            Sets up the live server and databases, and then loops over handling
+            http requests.
+            """
+
+            def sync_handle_request(self):
                 try:
-                    options = dev_appserver_main.DEFAULT_ARGS.copy()
-                    options['disable_task_running'] = True # Prevent launch of task queue thread
-                    dev_appserver.SetupStubs(appid, **options)
+                    readable, _, _ = select.select([self.socket], [], [], 10)
+                    if readable:
+                        liveServerLock.acquire()
+                        try:
+                            self.original_handle_request()
+                        except Exception, e:
+                            pass
+                        finally:
+                            liveServerLock.release()
+                except Exception, e:
+                    pass
 
-                    self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
-                except socket.error, e:
-                    error_code = e.errno
-                    if (index + 1 < len(self.possible_ports) and
-                        error_code == errno.EADDRINUSE):
-                        # This port is already in use, so we go on and try with
-                        # the next one in the list.
-                        continue
+            if self.connections_override:
+                from django.db import connections
+                # Override this thread's database connections with the ones
+                # provided by the main thread.
+                for alias, conn in self.connections_override.items():
+                    connections[alias] = conn
+            try:
+                # Go through the list of possible ports, hoping that we can find
+                # one that is free to use for the WSGI server.
+                for index, port in enumerate(self.possible_ports):
+                    try:
+                        options = dev_appserver_main.DEFAULT_ARGS.copy()
+                        options['disable_task_running'] = True # Prevent launch of task queue thread
+                        dev_appserver.SetupStubs(appid, **options)
+
+                        self.httpd = dev_appserver.CreateServer(".", '/_ah/login', port, default_partition="dev")
+                    except socket.error, e:
+                        error_code = e.errno
+                        if (index + 1 < len(self.possible_ports) and
+                            error_code == errno.EADDRINUSE):
+                            # This port is already in use, so we go on and try with
+                            # the next one in the list.
+                            continue
+                        else:
+                            # Either none of the given ports are free or the error
+                            # is something else than "Address already in use". So
+                            # we let that error bubble up to the main thread.
+                            raise
+
                     else:
-                        # Either none of the given ports are free or the error
-                        # is something else than "Address already in use". So
-                        # we let that error bubble up to the main thread.
-                        raise
+                        # A free port was found.
+                        self.port = port
+                        break
 
-                else:
-                    # A free port was found.
-                    self.port = port
-                    break
+                # HACK: The magic happens here.  We replace the http request handler
+                # with our sync'd version
+                self.httpd.original_handle_request = self.httpd.handle_request
+                self.httpd.handle_request = types.MethodType(sync_handle_request, self.httpd)
 
-            # HACK: The magic happens here.  We replace the http request handler
-            # with our sync'd version
-            self.httpd.original_handle_request = self.httpd.handle_request
-            self.httpd.handle_request = types.MethodType(sync_handle_request, self.httpd)
-
-            self.is_ready.set()           
-            self.httpd.serve_forever()
-        except Exception, e:
-            self.error = e
-            try:
-                self.httpd.server_close()
+                self.is_ready.set()           
+                self.httpd.serve_forever()
             except Exception, e:
-                pass
-            self.is_ready.set()
+                self.error = e
+                try:
+                    self.httpd.server_close()
+                except Exception, e:
+                    pass
+                self.is_ready.set()
 
-    def join(self, timeout=None):
-        if hasattr(self, 'httpd'):
-            # Stop the WSGI server
-            try:
-                self.httpd.stop_serving_forever()
-                # We need to hit the server with one more request to make it quit
-                connection = httplib.HTTPConnection(self.host, self.port)
-                connection.request('GET',"/")
-                connection.close()
-                #self.httpd.server_close()
-            except Exception, e:
-                pass
-        super(LiveServerThread, self).join(timeout)
+        def join(self, timeout=None):
+            if hasattr(self, 'httpd'):
+                # Stop the WSGI server
+                try:
+                    self.httpd.stop_serving_forever()
+                    # We need to hit the server with one more request to make it quit
+                    connection = httplib.HTTPConnection(self.host, self.port)
+                    connection.request('GET',"/")
+                    connection.close()
+                    #self.httpd.server_close()
+                except Exception, e:
+                    pass
+            super(LiveServerThread, self).join(timeout)
+
+except ImportError:
+    # can't use dev_appserver in devappserver2
+    pass
 
 # This is copied directly from django.test.testcases
 class LiveServerTestCase(TransactionTestCase):

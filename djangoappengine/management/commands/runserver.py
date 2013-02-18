@@ -7,7 +7,17 @@ from django.core.management.base import BaseCommand
 from django.core.management.commands.runserver import BaseRunserverCommand
 from django.core.exceptions import ImproperlyConfigured
 
-from google.appengine.tools import dev_appserver_main
+try:
+    from google.appengine.tools import dev_appserver_main
+except ImportError:
+    import os
+    import google
+    sys.argv[0] = os.path.join(
+                    os.path.dirname(os.path.dirname(google.__file__)),
+                    "devappserver2.py")
+    # The following import sets the path for _python_runtime.py from
+    # sys.argv[0], so we need to hack sys.argv[0] before this import
+    from google.appengine.tools.devappserver2 import devappserver2
 
 from ...boot import PROJECT_DIR
 from ...db.base import DatabaseWrapper, get_datastore_paths
@@ -106,7 +116,10 @@ class Command(BaseRunserverCommand):
         parse the arguments to this command.
         """
         # Hack __main__ so --help in dev_appserver_main works OK.
-        sys.modules['__main__'] = dev_appserver_main
+        if 'dev_appserver_main' in globals():
+            sys.modules['__main__'] = dev_appserver_main
+        else:
+            sys.modules['__main__'] = devappserver2
         return super(Command, self).create_parser(prog_name, subcommand)
 
     def run_from_argv(self, argv):
@@ -130,7 +143,10 @@ class Command(BaseRunserverCommand):
         args = []
         # Set bind ip/port if specified.
         if self.addr:
-            args.extend(['--address', self.addr])
+            if 'dev_appserver_main' in globals():
+                args.extend(['--address', self.addr])
+            else:
+                args.extend(['--host', self.addr])
         if self.port:
             args.extend(['--port', self.port])
 
@@ -169,10 +185,16 @@ class Command(BaseRunserverCommand):
                 break
 
         # Process the rest of the options here.
-        bool_options = [
-            'debug', 'debug_imports', 'clear_datastore', 'require_indexes',
-            'high_replication', 'enable_sendmail', 'use_sqlite',
-            'allow_skipped_files', 'disable_task_running', ]
+        if 'dev_appserver_main' in globals():
+            bool_options = [
+                'debug', 'debug_imports', 'clear_datastore', 'require_indexes',
+                'high_replication', 'enable_sendmail', 'use_sqlite',
+                'allow_skipped_files', 'disable_task_running', ]
+        else:
+            bool_options = [
+                'debug', 'debug_imports', 'clear_datastore', 'require_indexes',
+                'enable_sendmail', 'use_sqlite',
+                'allow_skipped_files', 'disable_task_running', ]
         for opt in bool_options:
             if options[opt] != False:
                 args.append('--%s' % opt)
@@ -199,4 +221,8 @@ class Command(BaseRunserverCommand):
         logging.getLogger().setLevel(logging.INFO)
 
         # Append the current working directory to the arguments.
-        dev_appserver_main.main([self.progname] + args + [PROJECT_DIR])
+        if 'dev_appserver_main' in globals():
+            dev_appserver_main.main([self.progname] + args + [PROJECT_DIR])
+        else:
+            sys.argv = ['/home/user/google_appengine/devappserver2.py'] + args + [PROJECT_DIR]
+            devappserver2.main()
