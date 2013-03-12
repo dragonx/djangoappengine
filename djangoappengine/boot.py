@@ -69,12 +69,15 @@ def setup_env():
         sys.path = [ sdk_path ] + sys.path
 
         # Then call fix_sys_path from the SDK
+        from dev_appserver import fix_sys_path
         try:
-            from dev_appserver import fix_sys_path
-            fix_sys_path()
-        except ImportError:
-            import devappserver2 
-            devappserver2.fix_sys_path(devappserver2.DEVAPPSERVER2_PATHS)
+            # emulate dev_appserver._run_file in devappserver2
+            from dev_appserver import _SYS_PATH_ADDITIONS
+            sys.path = _SYS_PATH_ADDITIONS['_python_runtime.py'] + sys.path
+        except:
+            # we're probably on the old dev_appserver
+            pass
+        fix_sys_path()
 
     setup_project()
     from .utils import have_appserver

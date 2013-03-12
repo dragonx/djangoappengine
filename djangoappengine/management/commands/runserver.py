@@ -193,7 +193,7 @@ class Command(BaseRunserverCommand):
         else:
             bool_options = [
                 'debug', 'debug_imports', 'clear_datastore', 'require_indexes',
-                'enable_sendmail', 'use_sqlite',
+                'enable_sendmail',
                 'allow_skipped_files', 'disable_task_running', ]
         for opt in bool_options:
             if options[opt] != False:
