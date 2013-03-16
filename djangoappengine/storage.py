@@ -140,6 +140,13 @@ class BlobstoreFile(File):
             self._file = BlobReader(self.blobstore_info.key())
         return self._file
 
+    @property
+    def url(self):
+        try:
+            return get_serving_url(self.blobstore_info.key())
+        except NotImageError:
+            return None
+
 
 class BlobstoreFileUploadHandler(FileUploadHandler):
     """
@@ -197,3 +204,10 @@ class BlobstoreUploadedFile(UploadedFile):
 
     def multiple_chunks(self, chunk_size=1024 * 128):
         return True
+
+    @property
+    def url(self):
+        try:
+            return get_serving_url(self.blobstore_info.key())
+        except NotImageError:
+            return None
