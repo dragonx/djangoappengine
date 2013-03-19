@@ -1,13 +1,9 @@
-import logging
-from optparse import make_option
-import sys
-
-from django.db import connections
-from django.core.management.base import BaseCommand
 from django.core.management.commands.test import Command as OriginalCommand
-from django.core.exceptions import ImproperlyConfigured
 
 from django.test import client
+
+from google.appengine.api import files
+from google.appengine.ext.blobstore import BlobInfo
 
 original_encode_file = client.encode_file
 
@@ -21,23 +17,20 @@ def my_encode_file(boundary, key, file):
     with files.open(fn, 'a') as fp:
         fp.write("bar")
     files.finalize(fn)
-    blob_key = files.blobstore.get_blob_key(fn)
 
     with files.open(fn) as fp:
-        fp.name = "foo.jpg"
-        fp.blob_key = blob_key
-        fp.mime_type = "image/jpg"
         response = self.client.post('/viewurl', {"fileparam" : fp})
     '''
-
-    if hasattr(file, "blob_key"):
+    if hasattr(file, "_filename"):
+        blob_key = files.blobstore.get_blob_key(file._filename)
+        blobinfo = BlobInfo.get(blob_key)
         return [
             '--' + boundary,
-            'Content-Type: message/external-body; blob-key=%s; access-type="X-AppEngine-BlobKey"' % file.blob_key,
+            'Content-Type: message/external-body; blob-key=%s; access-type="X-AppEngine-BlobKey"' % blob_key,
             'MIME-Version: 1.0',
-            'Content-Disposition: form-data; name="%s"; filename="%s"' % (key, file.name),
+            'Content-Disposition: form-data; name="%s"; filename="%s"' % (key, blobinfo.filename),
             '',
-            'Content-Type: %s' % file.mime_type
+            'Content-Type: %s' % blobinfo.content_type
         ]
     else:
         return original_encode_file(boundary, key, file)
