@@ -65,6 +65,7 @@ class StubManager(object):
                                               'login_url' : '/_ah/login?continue=%s' })
         self.testbed.init_xmpp_stub()
         self.testbed.init_channel_stub()
+        self.testbed.init_blobstore_stub(True)
 
     def deactivate_test_stubs(self):
         if self.active_stubs == 'test':
