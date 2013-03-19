@@ -1,13 +1,17 @@
 import datetime
 
 from django.test import TestCase
+from django.db.models.fields.files import FieldFile
 
 from google.appengine.api.datastore import Get
 from google.appengine.api.datastore_types import Text, Category, Email, \
     Link, PhoneNumber, PostalAddress, Text, Blob, ByteString, GeoPt, IM, \
     Key, Rating, BlobKey
+from google.appengine.api import files
+from django.core.files.base import ContentFile
 
 from .testmodels import FieldsWithoutOptionsModel
+from djangoappengine.storage import BlobstoreFile, BlobstoreStorage
 
 # TODO: Add field conversions for ForeignKeys?
 
@@ -16,12 +20,18 @@ class FieldDBConversionTest(TestCase):
 
     def test_db_conversion(self):
         actual_datetime = datetime.datetime.now()
+
+        bs = BlobstoreStorage()
+        fn = bs.save("foo.txt", ContentFile("test"))
+        bf = BlobstoreFile(fn, 'a', bs)
+
         entity = FieldsWithoutOptionsModel(
             datetime=actual_datetime, date=actual_datetime.date(),
             time=actual_datetime.time(), floating_point=5.97, boolean=True,
             null_boolean=False, text='Hallo', email='hallo@hallo.com',
             comma_seperated_integer='5,4,3,2',
             ip_address='194.167.1.1', slug='you slugy slut :)',
+            file=bf, file_path=bf.name,
             url='http://www.scholardocs.com', long_text=1000 * 'A',
             indexed_text='hello',
             integer=-400, small_integer=-4, positive_integer=400,
@@ -38,6 +48,7 @@ class FieldDBConversionTest(TestCase):
         for name, types in [('long_text', Text),
                 ('indexed_text', unicode),
                 ('text', unicode), ('ip_address', unicode), ('slug', unicode),
+                ('file', unicode), ('file_path', unicode),
                 ('email', unicode), ('comma_seperated_integer', unicode),
                 ('url', unicode), ('time', datetime.datetime),
                 ('datetime', datetime.datetime), ('date', datetime.datetime),
@@ -49,7 +60,7 @@ class FieldDBConversionTest(TestCase):
             column = opts.get_field_by_name(name)[0].column
             if not isinstance(types, (list, tuple)):
                 types = (types, )
-            self.assertTrue(type(gae_entity[column]) in types)
+            self.assertTrue(type(gae_entity[column]) in types, column)
 
         # Get the model instance and check if the fields convert back
         # to the right types.
@@ -59,6 +70,7 @@ class FieldDBConversionTest(TestCase):
                 ('indexed_text', unicode),
                 ('text', unicode), ('ip_address', unicode),
                 ('slug', unicode),
+                ('file', FieldFile), ('file_path', unicode),
                 ('email', unicode), ('comma_seperated_integer', unicode),
                 ('url', unicode), ('datetime', datetime.datetime),
                 ('date', datetime.date), ('time', datetime.time),
@@ -69,4 +81,4 @@ class FieldDBConversionTest(TestCase):
                 ('positive_small_integer', (int, long))]:
             if not isinstance(types, (list, tuple)):
                 types = (types, )
-            self.assertTrue(type(getattr(model, name)) in types)
+            self.assertTrue(type(getattr(model, name)) in types, name)
