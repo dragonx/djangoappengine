@@ -3,7 +3,7 @@ import os
 import time
 from urllib2 import HTTPError, URLError
 
-from ..boot import PROJECT_DIR
+from ..boot import PROJECT_DIR, devappserver_ver
 from ..utils import appid, have_appserver
 
 
@@ -65,7 +65,9 @@ class StubManager(object):
                                               'login_url' : '/_ah/login?continue=%s' })
         self.testbed.init_xmpp_stub()
         self.testbed.init_channel_stub()
+        self.testbed.init_files_stub(True)
         self.testbed.init_blobstore_stub(True)
+        self.testbed.init_images_stub(True)
 
     def deactivate_test_stubs(self):
         if self.active_stubs == 'test':
@@ -76,7 +78,7 @@ class StubManager(object):
         if self.active_stubs == 'local':
             return
         from .base import get_datastore_paths
-        try:
+        if devappserver_ver == 1:
             from google.appengine.tools import dev_appserver_main
             args = dev_appserver_main.DEFAULT_ARGS.copy()
             args.update(get_datastore_paths(connection.settings_dict))
@@ -87,7 +89,7 @@ class StubManager(object):
             dev_appserver.SetupStubs('dev~' + appid, **args)
             logging.getLogger().setLevel(log_level)
             self.active_stubs = 'local'
-        except ImportError:
+        elif devappserver_ver == 2:
             #from google.appengine.tools.devappserver2.devappserver2 import create_command_line_parser
             #parser = create_command_line_parser()
             #options = parser.parse_args()

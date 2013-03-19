@@ -7,9 +7,11 @@ from django.core.management.base import BaseCommand
 from django.core.management.commands.runserver import BaseRunserverCommand
 from django.core.exceptions import ImproperlyConfigured
 
-try:
+from ...boot import devappserver_ver
+
+if devappserver_ver == 1:
     from google.appengine.tools import dev_appserver_main
-except ImportError:
+elif devappserver_ver == 2:
     import os
     import google
     sys.argv[0] = os.path.join(
@@ -116,7 +118,7 @@ class Command(BaseRunserverCommand):
         parse the arguments to this command.
         """
         # Hack __main__ so --help in dev_appserver_main works OK.
-        if 'dev_appserver_main' in globals():
+        if devappserver_ver == 1:
             sys.modules['__main__'] = dev_appserver_main
         else:
             sys.modules['__main__'] = devappserver2
@@ -143,7 +145,7 @@ class Command(BaseRunserverCommand):
         args = []
         # Set bind ip/port if specified.
         if self.addr:
-            if 'dev_appserver_main' in globals():
+            if devappserver_ver == 1:
                 args.extend(['--address', self.addr])
             else:
                 args.extend(['--host', self.addr])
@@ -185,7 +187,7 @@ class Command(BaseRunserverCommand):
                 break
 
         # Process the rest of the options here.
-        if 'dev_appserver_main' in globals():
+        if devappserver_ver == 1:
             bool_options = [
                 'debug', 'debug_imports', 'clear_datastore', 'require_indexes',
                 'high_replication', 'enable_sendmail', 'use_sqlite',
@@ -221,7 +223,7 @@ class Command(BaseRunserverCommand):
         logging.getLogger().setLevel(logging.INFO)
 
         # Append the current working directory to the arguments.
-        if 'dev_appserver_main' in globals():
+        if devappserver_ver == 1:
             dev_appserver_main.main([self.progname] + args + [PROJECT_DIR])
         else:
             sys.argv = ['/home/user/google_appengine/devappserver2.py'] + args + [PROJECT_DIR]
