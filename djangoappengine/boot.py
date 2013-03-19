@@ -2,6 +2,13 @@ import logging
 import os
 import sys
 
+global devappserver_ver
+try:
+    import force_devappserver
+    devappserver_ver = force_devappserver.devappserver_ver
+except:
+    devappserver_ver = 1
+
 def find_project_dir():
     """
         Go through the path, and look for manage.py
@@ -70,13 +77,10 @@ def setup_env():
 
         # Then call fix_sys_path from the SDK
         from dev_appserver import fix_sys_path
-        try:
+        if devappserver_ver == 2:
             # emulate dev_appserver._run_file in devappserver2
             from dev_appserver import _SYS_PATH_ADDITIONS
             sys.path = _SYS_PATH_ADDITIONS['_python_runtime.py'] + sys.path
-        except:
-            # we're probably on the old dev_appserver
-            pass
         fix_sys_path()
 
     setup_project()
@@ -153,7 +157,7 @@ def setup_project():
     # enable https connections (seem to be broken on Windows because
     # the _ssl module is disallowed).
     if not have_appserver:
-        try:
+        if devappserver_ver == 1:
             from google.appengine.tools import dev_appserver
             try:
                 # Backup os.environ. It gets overwritten by the
@@ -185,22 +189,18 @@ def setup_project():
             import atexit
             if hasattr(dev_appserver, 'TearDownStubs'):
                 atexit.register(dev_appserver.TearDownStubs)
-        except ImportError:
-            pass
     elif not on_production_server:
-        try:
-            # Restore the real subprocess module.
-            from google.appengine.tools import dev_appserver
-            from google.appengine.api.mail_stub import subprocess
-            sys.modules['subprocess'] = subprocess
-            # Re-inject the buffer() builtin into the subprocess module.
-            subprocess.buffer = dev_appserver.buffer
-        except ImportError:
-            # Not required for devappserver2
-            pass
-        except Exception, e:
-            logging.warn("Could not add the subprocess module to the "
-                         "sandbox: %s" % e)
+        if devappserver_ver == 1:
+            try:
+                # Restore the real subprocess module.
+                from google.appengine.tools import dev_appserver
+                from google.appengine.api.mail_stub import subprocess
+                sys.modules['subprocess'] = subprocess
+                # Re-inject the buffer() builtin into the subprocess module.
+                subprocess.buffer = dev_appserver.buffer
+            except Exception, e:
+                logging.warn("Could not add the subprocess module to the "
+                             "sandbox: %s" % e)
 
     os.environ.update(env_ext)
 
