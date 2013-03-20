@@ -360,8 +360,6 @@ else: # devappserver2
                 print 'Stopping server'
                 self.server.stop()
                 print 'Server stopped'
-                import eat
-                eat.gaebp()
 
             super(LiveServerTestCase, self)._post_teardown()
 
