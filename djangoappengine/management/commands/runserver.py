@@ -37,6 +37,10 @@ class Command(BaseRunserverCommand):
 
     option_list = BaseCommand.option_list + (
         make_option(
+            '--auto_id_policy',
+            help="Dictate how automatic IDs are assigned by the datastore " \
+                 "stub.  'sequential' or 'scattered'."),
+        make_option(
             '--debug', action='store_true', default=False,
             help="Prints verbose debugging messages to the console while " \
                  "running."),
@@ -203,7 +207,7 @@ class Command(BaseRunserverCommand):
 
         str_options = [
             'datastore_path', 'blobstore_path', 'history_path', 'login_url', 'smtp_host',
-            'smtp_port', 'smtp_user', 'smtp_password', ]
+            'smtp_port', 'smtp_user', 'smtp_password', 'auto_id_policy']
         for opt in str_options:
             if options.get(opt, None) != None:
                 args.extend(['--%s' % opt, options[opt]])
