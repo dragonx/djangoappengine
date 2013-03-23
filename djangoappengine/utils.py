@@ -9,14 +9,15 @@ have_appserver = bool(apiproxy_stub_map.apiproxy.GetStub('datastore_v3'))
 if have_appserver:
     appid = get_application_id()
 else:
-    try:
+    from boot import devappserver_ver
+    if devappserver_ver == 1:
         # Original dev_appserver method
         from google.appengine.tools import dev_appserver
         from .boot import PROJECT_DIR
         appconfig = dev_appserver.LoadAppConfig(PROJECT_DIR, {},
                                                 default_partition='dev')[0]
         appid = appconfig.application.split('~', 1)[-1]
-    except ImportError, e:
+    else:
         try:
             from google.appengine.tools.devappserver2 import application_configuration
             configuration = application_configuration.ApplicationConfiguration(["app.yaml"])
