@@ -5,7 +5,6 @@ import sys
 from django.db import connections
 from django.core.management.base import BaseCommand
 from django.core.management.commands.runserver import BaseRunserverCommand
-from django.core.exceptions import ImproperlyConfigured
 
 from ...boot import devappserver_ver
 
@@ -230,5 +229,12 @@ class Command(BaseRunserverCommand):
         if devappserver_ver == 1:
             dev_appserver_main.main([self.progname] + args + [PROJECT_DIR])
         else:
+            from google.appengine.api import apiproxy_stub_map
+            from google.appengine.tools.devappserver2 import devappserver2
+
+            # Environment is set in djangoappengine.stubs.setup_local_stubs()
+            # We need to do this effectively reset the stubs.
+            apiproxy_stub_map.apiproxy = apiproxy_stub_map.GetDefaultAPIProxy()
+
             sys.argv = ['/home/user/google_appengine/devappserver2.py'] + args + [PROJECT_DIR]
             devappserver2.main()
