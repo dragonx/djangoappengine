@@ -127,6 +127,12 @@ class BlobstoreFile(File):
         self._mode = mode
         self.blobstore_info = storage._get_blobinfo(name)
 
+    def __str__(self):
+        return self.blobstore_info.filename
+
+    def __unicode__(self):
+        return self.blobstore_info.filename
+
     @property
     def size(self):
         return self.blobstore_info.size
