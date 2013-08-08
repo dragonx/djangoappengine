@@ -12,6 +12,7 @@ from google.appengine.api.datastore import Entity, Query, MultiQuery, \
     Put, Get, Delete
 from google.appengine.api.datastore_errors import Error as GAEError
 from google.appengine.api.datastore_types import Key, Text
+from google.appengine.datastore.datastore_query import Cursor
 
 from djangotoolbox.db.basecompiler import (
     NonrelQuery,
@@ -92,6 +93,7 @@ class GAEQuery(NonrelQuery):
         self.pks_only = (len(fields) == 1 and fields[0].primary_key)
         start_cursor = getattr(self.query, '_gae_start_cursor', None)
         end_cursor = getattr(self.query, '_gae_end_cursor', None)
+        self.config = getattr(self.query, '_gae_config', {})
         self.gae_query = [Query(self.db_table, keys_only=self.pks_only,
                                 cursor=start_cursor, end_cursor=end_cursor)]
 
@@ -100,7 +102,7 @@ class GAEQuery(NonrelQuery):
         return '<GAEQuery: %r ORDER %r>' % (self.gae_query, self.ordering)
 
     @safe_call
-    def fetch(self, low_mark, high_mark):
+    def fetch(self, low_mark=0, high_mark=None):
         query = self._build_query()
         executed = False
         if self.excluded_pks and high_mark is not None:
@@ -108,17 +110,28 @@ class GAEQuery(NonrelQuery):
         if self.included_pks is not None:
             results = self.get_matching_pk(low_mark, high_mark)
         else:
-            if high_mark is None:
+            if high_mark is None or high_mark > low_mark:
                 kw = {}
+                if self.config:
+                    kw.update(self.config)
+
                 if low_mark:
                     kw['offset'] = low_mark
+                else:
+                    low_mark = 0
+
+                if high_mark:
+                    kw['limit'] = high_mark - low_mark
+
                 results = query.Run(**kw)
-                executed = True
-            elif high_mark > low_mark:
-                results = query.Get(high_mark - low_mark, low_mark)
                 executed = True
             else:
                 results = ()
+
+        if executed and not isinstance(query, MultiQuery):
+            def get_cursor():
+                return query.GetCursor()
+            self.query._gae_cursor = get_cursor
 
         for entity in results:
             if isinstance(entity, Key):
@@ -128,12 +141,6 @@ class GAEQuery(NonrelQuery):
             if key in self.excluded_pks:
                 continue
             yield self._make_entity(entity)
-
-        if executed and not isinstance(query, MultiQuery):
-            try:
-                self.query._gae_cursor = query.GetCompiledCursor()
-            except:
-                pass
 
     @safe_call
     def count(self, limit=NOT_PROVIDED):
@@ -329,7 +336,14 @@ class GAEQuery(NonrelQuery):
     def get_matching_pk(self, low_mark=0, high_mark=None):
         if not self.included_pks:
             return []
-        results = [result for result in Get(self.included_pks)
+
+        config = self.config.copy()
+
+        # batch_size is not allowed for Gets
+        if 'batch_size' in config:
+            del config['batch_size']
+
+        results = [result for result in Get(self.included_pks, **config)
                    if result is not None and
                        self.matches_filters(result)]
         if self.ordering:
@@ -363,6 +377,21 @@ class SQLCompiler(NonrelCompiler):
     """
     query_class = GAEQuery
 
+    def as_sql(self, *args, **kwargs):
+        sql, params = super(SQLCompiler, self).as_sql(*args, **kwargs)
+
+        start_cursor = getattr(self.query, '_gae_start_cursor', None)
+        end_cursor = getattr(self.query, '_gae_end_cursor', None)
+
+        start_cursor_str = ''
+        end_cursor_str = ''
+
+        if start_cursor:
+            start_cursor_str = Cursor.to_websafe_string(start_cursor)
+        if end_cursor:
+            end_cursor_str = Cursor.to_websafe_string(end_cursor)
+
+        return '%s --cursor:%s,%s' % (sql, start_cursor_str, end_cursor_str), params
 
 class SQLInsertCompiler(NonrelInsertCompiler, SQLCompiler):
 

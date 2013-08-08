@@ -15,6 +15,8 @@ Contents
    db
    services
    management
+   admin
+   mapreduce
 
 
 Contribute

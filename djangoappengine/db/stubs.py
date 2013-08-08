@@ -27,6 +27,7 @@ def rpc_server_factory(*args, ** kwargs):
 class StubManager(object):
 
     def __init__(self):
+        self.testbed = None
         self.active_stubs = None
         self.pre_test_stubs = None
 
@@ -37,9 +38,6 @@ class StubManager(object):
             self.setup_local_stubs(connection)
 
     def activate_test_stubs(self, connection):
-        from google.appengine.ext.testbed import Testbed
-        self.testbed = Testbed()
-
         if self.active_stubs == 'test':
             return
 
@@ -53,8 +51,11 @@ class StubManager(object):
             from google.appengine.datastore import datastore_stub_util
             datastore_opts['consistency_policy'] = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
 
+        if self.testbed is None:
+            from google.appengine.ext.testbed import Testbed
+            self.testbed = Testbed()
+
         self.testbed.activate()
-        self.testbed.setup_env(True, **{'app_id' : 'dev~' + appid })
         self.pre_test_stubs = self.active_stubs
         self.active_stubs = 'test'
         self.testbed.init_datastore_v3_stub(**datastore_opts)
