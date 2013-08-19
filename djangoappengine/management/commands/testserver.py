@@ -1,8 +1,5 @@
 from django.core.management.base import BaseCommand
 
-from google.appengine.api import apiproxy_stub_map
-from google.appengine.datastore import datastore_stub_util
-
 from optparse import make_option
 
 class Command(BaseCommand):
@@ -47,17 +44,8 @@ class Command(BaseCommand):
                 db_name = name
                 break
 
-        # Temporarily change consistency policy to force apply loaded data
-        datastore = apiproxy_stub_map.apiproxy.GetStub('datastore_v3')
-
-        orig_consistency_policy = datastore._consistency_policy
-        datastore.SetConsistencyPolicy(datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1))
-
         # Import the fixture data into the test database.
         call_command('loaddata', *fixture_labels, **{'verbosity': verbosity})
-
-        # reset original policy
-        datastore.SetConsistencyPolicy(orig_consistency_policy)
 
         # Run the development server. Turn off auto-reloading because it causes
         # a strange error -- it causes this handle() method to be called
