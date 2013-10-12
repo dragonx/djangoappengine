@@ -1,10 +1,50 @@
 from djangoappengine.db.utils import get_cursor, set_cursor, set_config
+from django.db.models.sql.query import Query
 
-from google.appengine.api.datastore import Key
+from google.appengine.datastore import datastore_query
 
 from mapreduce.datastore_range_iterators import AbstractKeyRangeIterator, _KEY_RANGE_ITERATORS
-from mapreduce.input_readers import AbstractDatastoreInputReader, _get_params, BadReaderParamsError
+from mapreduce.input_readers import AbstractDatastoreInputReader, RawDatastoreInputReader, _get_params, BadReaderParamsError
 from mapreduce import util
+
+class DjangoKeyIterator(AbstractKeyRangeIterator):
+    """An iterator that takes a Django model ('app.models.Model') and yields Keys for that model"""
+    _KEYS_ONLY = True
+    def __iter__(self):
+        query = Query(util.for_name(self._query_spec.model_class_path)).get_compiler(using="default").build_query()
+        raw_entity_kind = query.db_table
+
+        q = self._key_range.make_ascending_datastore_query(raw_entity_kind, keys_only=self._KEYS_ONLY)
+        if self._cursor:
+            q = set_cursor(q, self._cursor)
+
+        self._query = q
+        for key in q.Run(
+            config=datastore_query.QueryOptions(batch_size=self._query_spec.batch_size)):
+          yield key
+
+    def _get_cursor(self):
+        if self._query is not None:
+            return self._query.cursor()
+
+_KEY_RANGE_ITERATORS[DjangoKeyIterator.__name__] = DjangoKeyIterator
+
+class DjangoKeyInputReader(RawDatastoreInputReader):
+    """An input reader that takes a Django model ('app.models.Model') and yields keys for that model"""
+    _KEY_RANGE_ITER_CLS = DjangoKeyIterator
+
+
+class DjangoRawEntityIterator(DjangoKeyIterator):
+    """An iterator that takes a Django model ('app.models.Model') and yields raw entities for that model"""
+    _KEYS_ONLY = False
+
+_KEY_RANGE_ITERATORS[DjangoRawEntityIterator.__name__] = DjangoRawEntityIterator
+
+
+class DjangoRawEntityInputReader(RawDatastoreInputReader):
+    """An input reader that takes a Django model ('app.models.Model') and yields raw entities for that model"""
+    _KEY_RANGE_ITER_CLS = DjangoRawEntityIterator
+
 
 class DjangoModelIterator(AbstractKeyRangeIterator):
     def __iter__(self):
