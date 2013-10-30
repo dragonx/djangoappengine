@@ -37,6 +37,15 @@ def my_encode_file(boundary, key, file):
 
 class Command(OriginalCommand):
     def __init__(self):
+        # Add a non-null version for DEFAULT_VERSION_HOSTNAME
+        # or else the mapreduce library's handler function
+        # throws an exception.  This only prevents the exception.
+        import os
+        default_version_hostname = "mr-test-support.appspot.com"
+        if "DEFAULT_VERSION_HOSTNAME" not in os.environ:
+            os.environ["DEFAULT_VERSION_HOSTNAME"] = (
+                    default_version_hostname)
+
         # monkey patch client's encode_file with our own
         # with blobstore support
         client.encode_file = my_encode_file
