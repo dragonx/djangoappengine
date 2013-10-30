@@ -68,7 +68,7 @@ class StubManager(object):
         self.testbed.init_channel_stub()
         self.testbed.init_files_stub(True)
         self.testbed.init_blobstore_stub(True)
-        self.testbed.init_images_stub(False)
+        self.testbed.init_images_stub(True)
 
     def deactivate_test_stubs(self):
         if self.active_stubs == 'test':
