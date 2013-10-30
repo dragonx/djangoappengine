@@ -68,7 +68,7 @@ class StubManager(object):
         self.testbed.init_channel_stub()
         self.testbed.init_files_stub(True)
         self.testbed.init_blobstore_stub(True)
-        self.testbed.init_images_stub(True)
+        self.testbed.init_images_stub(False)
 
     def deactivate_test_stubs(self):
         if self.active_stubs == 'test':
@@ -86,7 +86,9 @@ class StubManager(object):
         log_level = logging.getLogger().getEffectiveLevel()
         logging.getLogger().setLevel(logging.WARNING)
         from google.appengine.tools import dev_appserver
-        dev_appserver.SetupStubs('dev~' + appid, **args)
+        dev_appserver.SetupStubs('dev~' + appid, 
+                                 _use_atexit_for_datastore_stub=True,
+                                 **args)
         logging.getLogger().setLevel(log_level)
         self.active_stubs = 'local'
         if devappserver_ver == 2:
